@@ -21,7 +21,7 @@ import math, platform, StringIO
 from . import png   
 # comment out for GAE deployment---------
 from numpy.ctypeslib import ndpointer
-import Tkinter,tkFileDialog,tkSimpleDialog
+import Tkinter,tkFileDialog,tkSimpleDialog,tkMessageBox 
 import ctypes
 from scipy.special import betainc 
 from numpy.fft import fft2, ifft2, fftshift 
@@ -357,6 +357,13 @@ def select_directory(title=None):
         return None
     else:
         return d    
+    
+def askyesno(question):
+    root = Tkinter.Tk()
+    root.withdraw() 
+    answer = tkMessageBox.askyesno('Query', question)     
+    root.destroy()
+    return answer
 
 def select_infile(filt=None,title=None,mask=None):
     root = Tkinter.Tk()

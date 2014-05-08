@@ -8,7 +8,7 @@
 #  Usage:             
 #    python mmse_filter.py 
 #
-#  Copyright (c) 2013, Mort Canty
+#  Copyright (c) 2014, Mort Canty
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation; either version 2 of the License, or
@@ -20,12 +20,11 @@
 #    GNU General Public License for more details.
 
 import auxil.auxil as auxil
-import auxil.polsar as polsar
 import auxil.congrid as congrid
-import os, time
+import os, sys, time
 import numpy as np
 from osgeo import gdal
-from osgeo.gdalconst import GDT_CFloat32
+from osgeo.gdalconst import GA_ReadOnly, GDT_Float32
 
 templates = np.zeros((8,7,7),dtype=int)
 for j in range(7):
@@ -68,34 +67,22 @@ def get_windex(j,cols):
     windex[42:49] = (j+3)*cols + six
     return windex
 
-#def get_windex(i,cols):
-##  first window for column i    
-#    windex = np.zeros(49,dtype=int)
-#    six = np.array([0,1,2,3,4,5,6])*cols
-#    windex[0:7]   = (i-3) + six
-#    windex[7:14]  = (i-2) + six
-#    windex[14:21] = (i-1) + six
-#    windex[21:28] = (i)   + six 
-#    windex[28:35] = (i+1) + six 
-#    windex[35:42] = (i+2) + six
-#    windex[42:49] = (i+3) + six
-#    return windex
-
 def main():
     gdal.AllRegister()
     path = auxil.select_directory('Choose working directory')
     if path:
         os.chdir(path)        
 #  SAR image    
-    infile = auxil.select_infile(filt='.hdr',title='Select SAR image header') 
-    if not infile:
-        return
-    end = auxil.select_integer(1,msg='Byte order: 1=Little Endian, 2=Big Endian')
-    if end == 2:
-        endian = 'B'
+    infile = auxil.select_infile(title='Choose SAR image') 
+    if infile:                   
+        inDataset = gdal.Open(infile,GA_ReadOnly)     
+        cols = inDataset.RasterXSize
+        rows = inDataset.RasterYSize    
+        bands = inDataset.RasterCount
     else:
-        endian = 'L'
-    ps = polsar.Polsar(infile,endian=endian)
+        return
+#  spatial subset    
+    x0,y0,rows,cols=auxil.select_dims([0,0,rows,cols])    
 #  number of looks
     m = auxil.select_integer(5,msg='Number of looks')
     if not m:
@@ -105,19 +92,32 @@ def main():
     if not outfile:
         return       
 #  get filter weights from span image
-    rows = ps.lines
-    cols = ps.samples
     b = np.ones((rows,cols))
-    span = ps.span().ravel()
+    band = inDataset.GetRasterBand(1)
+    span = band.ReadAsArray(x0,y0,cols,rows).ravel()
+    if bands==9:      
+        band = inDataset.GetRasterBand(6)
+        span += band.ReadAsArray(x0,y0,cols,rows).ravel()
+        band = inDataset.GetRasterBand(9)
+        span += band.ReadAsArray(x0,y0,cols,rows).ravel()
+    elif bands==4:
+        band = inDataset.GetRasterBand(4)
+        span += band.ReadAsArray(x0,y0,cols,rows).ravel()    
     edge_idx = np.zeros((rows,cols),dtype=int)
     print '========================='
     print '       MMSE_FILTER'
     print '========================='
+    print time.asctime()
     print 'infile:  %s'%infile
     print 'number of looks: %i'%m     
     print 'Determining filter weights from span image'    
-    start = time.time()     
+    start = time.time()
+    print 'row: ',
+    sys.stdout.flush()     
     for j in range(3,rows-3):
+        if j%50 == 0:
+            print '%i '%j, 
+            sys.stdout.flush()
         windex = get_windex(j,cols)
         for i in range(3,cols-3):
             wind = np.reshape(span[windex],(7,7))
@@ -150,20 +150,28 @@ def main():
             wind = wind.ravel()[edge]
             gbar = np.mean(wind)
             varg = np.var(wind)
-            b[j,i] = np.max( ((1.0 - gbar**2/(varg*m))/(1.0+1.0/m), 0.0) )        
+            if varg > 0:
+                b[j,i] = np.max( ((1.0 - gbar**2/(varg*m))/(1.0+1.0/m), 0.0) )        
             windex += 1
+    print ' done'        
 #  filter the image
-    outim = np.zeros((rows,cols),dtype=complex)
+    outim = np.zeros((rows,cols),dtype=np.float32)
     driver = gdal.GetDriverByName(fmt)    
-    outDataset = driver.Create(outfile,cols,rows,6,GDT_CFloat32)
-    if ps.geotransform is not None:
-        outDataset.SetGeoTransform(ps.geotransform)
-    if ps.projection is not None:
-        outDataset.SetProjection(ps.projection) 
+    outDataset = driver.Create(outfile,cols,rows,bands,GDT_Float32)
+    geotransform = inDataset.GetGeoTransform()
+    if geotransform is not None:
+        gt = list(geotransform)
+        gt[0] = gt[0] + x0*gt[1]
+        gt[3] = gt[3] + y0*gt[5]
+        outDataset.SetGeoTransform(tuple(gt))
+    projection = inDataset.GetProjection()        
+    if projection is not None:
+        outDataset.SetProjection(projection) 
     print 'Filtering covariance matrix elememnts'  
-    for k in range(6):
-        print 'band: %i'%(k+1)
-        band = ps.band(k)
+    for k in range(1,bands+1):
+        print 'band: %i'%(k)
+        band = inDataset.GetRasterBand(k)
+        band = band.ReadAsArray(0,0,cols,rows)
         gbar = band*0.0
 #      get window means
         for j in range(3,rows-3):        
@@ -175,8 +183,8 @@ def main():
                 gbar[j,i] = np.mean(wind)
                 windex += 1
 #      apply adaptive filter and write to disk
-        outim = gbar + b*(band-gbar)   
-        outBand = outDataset.GetRasterBand(k+1)
+        outim = np.reshape(gbar + b*(band-gbar),(rows,cols))   
+        outBand = outDataset.GetRasterBand(k)
         outBand.WriteArray(outim,0,0) 
         outBand.FlushCache() 
     outDataset = None

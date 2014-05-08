@@ -6,7 +6,7 @@
 #  Usage:             
 #    python gamma_filter.py 
 #
-#  Copyright (c) 2013, Mort Canty
+#  Copyright (c) 2014, Mort Canty
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation; either version 2 of the License, or
@@ -18,12 +18,11 @@
 #    GNU General Public License for more details.
 
 import auxil.auxil as auxil
-import auxil.polsar as polsar
 import auxil.congrid as congrid
-import os, time
+import os, sys, time
 import numpy as np
 from osgeo import gdal
-from osgeo.gdalconst import GDT_CFloat32
+from osgeo.gdalconst import GDT_Float32, GA_ReadOnly
 
 templates = np.zeros((8,7,7),dtype=int)
 for j in range(7):
@@ -68,8 +67,13 @@ def get_windex(j,cols):
 def gamma_filter(k,inimage,outimage,rows,cols,m):
     result = np.copy(inimage[k])
     arr = outimage[k].ravel()
-    print 'filtering band %i'%(k+1)   
+    print 'filtering band %i'%(k+1)
+    print 'row: ',
+    sys.stdout.flush()    
     for j in range(3,rows-3):
+        if j%50 == 0:
+            print '%i '%j, 
+            sys.stdout.flush()
         windex = get_windex(j,cols)
         for i in range(3,cols-3):
 #          central pixel, always from original input image
@@ -101,15 +105,17 @@ def gamma_filter(k,inimage,outimage,rows,cols,m):
                 else:
                     edge = templates[3] 
             wind = wind.ravel()[edge] 
-            var = np.var(wind) 
-            mu = np.mean(wind)  
-            alpha = (1 +1.0/m)/(var/mu**2 - 1/m)
-            if alpha < 0:
-                alpha = np.abs(alpha)
-            a = mu*(alpha-m-1)
-            x = (a+np.sqrt(4*g*m*alpha*mu+a**2))/(2*alpha)        
-            result[j,i] = x
+            var = np.var(wind)
+            if var > 0: 
+                mu = np.mean(wind)  
+                alpha = (1 +1.0/m)/(var/mu**2 - 1/m)
+                if alpha < 0:
+                    alpha = np.abs(alpha)
+                a = mu*(alpha-m-1)
+                x = (a+np.sqrt(4*g*m*alpha*mu+a**2))/(2*alpha)        
+                result[j,i] = x
             windex += 1  
+    print ' done'        
     return result          
 
 def main():
@@ -118,17 +124,20 @@ def main():
     if path:
         os.chdir(path)        
 #  SAR image    
-    infile = auxil.select_infile(filt='.hdr',title='Select SAR image header') 
-    if not infile:
-        return
-    end = auxil.select_integer(1,msg='Byte order: 1=Little Endian, 2=Big Endian')
-    if end == 2:
-        endian = 'B'
+    infile = auxil.select_infile(title='Choose SAR image') 
+    if infile:                   
+        inDataset = gdal.Open(infile,GA_ReadOnly)     
+        cols = inDataset.RasterXSize
+        rows = inDataset.RasterYSize    
+        bands = inDataset.RasterCount
     else:
-        endian = 'L'
-    ps = polsar.Polsar(infile,endian=endian)
+        return
+#  spatial subset    
+    x0,y0,rows,cols=auxil.select_dims([0,0,rows,cols])    
 #  number of looks
     m = auxil.select_integer(5,msg='Number of looks')
+    if not m:
+        return
 #  number of iterations
     niter = auxil.select_integer(1,msg='Number of iterations')    
 #  output file
@@ -136,17 +145,31 @@ def main():
     if not outfile:
         return       
 #  process diagonal bands only
-    rows = ps.lines
-    cols = ps.samples
-    planes = ps.planes
-    inimage = np.zeros((3,rows,cols))
-    inimage[0] = ps.band(0)
-    inimage[1] = ps.band(3)  
-    inimage[2] = ps.band(5)
+    driver = gdal.GetDriverByName(fmt) 
+    if bands == 9:   
+        outDataset = driver.Create(outfile,cols,rows,3,GDT_Float32)
+        inimage = np.zeros((3,rows,cols))
+        band = inDataset.GetRasterBand(1)
+        inimage[0] = band.ReadAsArray(x0,y0,cols,rows)     
+        band = inDataset.GetRasterBand(6)
+        inimage[1] = band.ReadAsArray(x0,y0,cols,rows)
+        band = inDataset.GetRasterBand(9)
+        inimage[2] = band.ReadAsArray(x0,y0,cols,rows)        
+    elif bands == 4:
+        outDataset = driver.Create(outfile,cols,rows,2,GDT_Float32)        
+        inimage = np.zeros((2,rows,cols))
+        band = inDataset.GetRasterBand(1)
+        inimage[0] = band.ReadAsArray(x0,y0,cols,rows)     
+        band = inDataset.GetRasterBand(4)
+        inimage[1] = band.ReadAsArray(x0,y0,cols,rows) 
+    else:
+        outDataset = driver.Create(outfile,cols,rows,1,GDT_Float32)
+        inimage = inDataset.GetRasterBand(1)  
     outimage = np.copy(inimage)
     print '========================='
-    print '       GAMMA_FILTER'
+    print '    GAMMA MAP FILTER'
     print '========================='
+    print time.asctime()
     print 'infile:  %s'%infile
     print 'number of looks: %i'%m   
     print 'number of iterations: %i'%niter         
@@ -154,25 +177,38 @@ def main():
     itr = 0
     while itr < niter:
         print 'iteration %i'%(itr+1) 
-        if planes in (9,5,3):
+        if bands == 9:
             for k in range(3):
                 outimage[k] = gamma_filter(k,inimage,outimage,rows,cols,m)
-        elif planes in (4,2):
+        elif bands == 4:
             for k in range(2):
                 outimage[k] = gamma_filter(k,inimage,outimage,rows,cols,m)   
         else:
-            outimage[0] = gamma_filter(0,inimage,outimage,rows,cols,m)                  
+            outimage = gamma_filter(0,inimage,outimage,rows,cols,m)                  
         itr += 1   
-    driver = gdal.GetDriverByName(fmt)    
-    outDataset = driver.Create(outfile,cols,rows,3,GDT_CFloat32)
-    if ps.geotransform is not None:
-        outDataset.SetGeoTransform(ps.geotransform)
-    if ps.projection is not None:
-        outDataset.SetProjection(ps.projection) 
-    for k in range(3):    
-        outBand = outDataset.GetRasterBand(k+1)
-        outBand.WriteArray(outimage[k],0,0) 
-        outBand.FlushCache() 
+    geotransform = inDataset.GetGeoTransform()
+    if geotransform is not None:
+        gt = list(geotransform)
+        gt[0] = gt[0] + x0*gt[1]
+        gt[3] = gt[3] + y0*gt[5]
+        outDataset.SetGeoTransform(tuple(gt))
+    projection = inDataset.GetProjection()        
+    if projection is not None:
+        outDataset.SetProjection(projection) 
+    if bands == 9:
+        for k in range(3):    
+            outBand = outDataset.GetRasterBand(k+1)
+            outBand.WriteArray(outimage[k],0,0) 
+            outBand.FlushCache() 
+    elif bands == 4:
+        for k in range(2):    
+            outBand = outDataset.GetRasterBand(k+1)
+            outBand.WriteArray(outimage[k],0,0) 
+            outBand.FlushCache() 
+    else:
+        outBand = outDataset.GetRasterBand(1)
+        outBand.WriteArray(outimage,0,0) 
+        outBand.FlushCache()                     
     outDataset = None
     print 'result written to: '+outfile 
     print 'elapsed time: '+str(time.time()-start)                 

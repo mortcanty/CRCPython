@@ -20,7 +20,6 @@
 import sys, getopt, gdal, Image
 import  auxil.auxil as auxil 
 from osgeo.gdalconst import GA_ReadOnly
-import numpy as np
 
 def dispms(filename=None,dims=None,rgb=None,enhance=None):
     gdal.AllRegister()
@@ -99,7 +98,7 @@ def main():
     for option, value in options: 
         if option == '-h':
             print 'Usage: python %s [-f filename -p pos -d dims -e enhancement]' %sys.argv[0]
-            print '       RGB bandPositions and spatialDimensions are quoted lists, e.g., -p "[0,1,3]" -d "[0,400,0,400]"\n'
+            print '       RGB bandPositions and spatialDimensions are quoted lists, e.g., -p "[0,1,3]" -d "[0,0,400,400]"\n'
             print '       enhancements: "1"=linear255 "2"=linear "3"=linear2pc "4"=equalization\n'
             sys.exit(1) 
         elif option == '-f':

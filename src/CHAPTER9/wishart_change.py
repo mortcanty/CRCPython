@@ -4,9 +4,9 @@
 #  Purpose:  Perfrom change detection on bitemporal, polarimetric EMISAR imagery 
 #            Based on Allan Nielsen's Matlab script
 #  Usage:             
-#    python wishart_change.py filenamex filenamey n m
+#    python wishart_change.py 
 #
-#  Copyright (c) 2012, Mort Canty
+#  Copyright (c) 2014, Mort Canty
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation; either version 2 of the License, or
@@ -19,178 +19,207 @@
 
 
 import auxil.auxil as auxil
-import auxil.polsar as polsar
-from numpy import * 
+import registerSAR
+import numpy as np
 from scipy import stats
 import os, time, gdal 
-from osgeo.gdalconst import GDT_Float32
+from osgeo.gdalconst import GA_ReadOnly, GDT_Float32
 
                        
 def main():
     print '================================'
     print 'Complex Wishart Change Detection'
     print '================================'
+    print time.asctime()
     gdal.AllRegister()
     path = auxil.select_directory('Choose working directory')
     if path:
         os.chdir(path)        
 #  first SAR image    
-    infile = auxil.select_infile(filt='.hdr',title='Select first SAR image header') 
-    if not infile:
-        return
-    end = auxil.select_integer(1,msg='Byte order: 1=Little Endian, 2=Big Endian')
-    if end == 2:
-        endian = 'B'
+    infile1 = auxil.select_infile(title='Choose first SAR image') 
+    if infile1:                   
+        inDataset1 = gdal.Open(infile1,GA_ReadOnly)     
+        cols = inDataset1.RasterXSize
+        rows = inDataset1.RasterYSize    
+        bands = inDataset1.RasterCount
     else:
-        endian = 'L'
+        return
     m = auxil.select_integer(5,msg='Number of looks')
     if not m:
         return
-    print 
-    print 'first filename:  %s'%infile
+    print 'first filename:  %s'%infile1
     print 'number of looks: %i'%m  
-    X = polsar.Polsar(infile,endian=endian)
 #  second SAR image    
-    infile = auxil.select_infile(filt='.hdr',title='Select second SAR image header') 
-    if not infile:
+    infile2 = auxil.select_infile(title='Choose second SAR image') 
+    if not infile2:                   
         return
-    end = auxil.select_integer(1,msg='Byte order: 1=Little Endian, 2=Big Endian')
-    if end == 2:
-        endian = 'B'
-    else:
-        endian = 'L'
     n = auxil.select_integer(5,msg='Number of looks')
     if not n:
         return
-    print 'second filename:  %s'%infile
+    print 'second filename:  %s'%infile2
     print 'number of looks: %i'%n  
+#  output file
     outfile,fmt = auxil.select_outfilefmt() 
     if not outfile:
-        return      
-    Y = polsar.Polsar(infile,endian=endian)  
-    if (X.bands != Y.bands) or (X.lines != Y.lines) or (X.samples != Y.samples):
+        return    
+    print 'co-registering...'
+    registerSAR.registerSAR(infile1,infile2,'warp.tif','GTiff')
+    infile2 = 'warp.tif'
+    inDataset2 = gdal.Open(infile2,GA_ReadOnly)     
+    cols2 = inDataset2.RasterXSize
+    rows2 = inDataset2.RasterYSize    
+    bands2 = inDataset2.RasterCount   
+    if (bands != bands2) or (cols != cols2) or (rows != rows2):
         print 'Size mismatch'
-        return
-    if  X.planes != Y.planes:
-        print 'File mismatch'
-        return        
-    X.times(n)
-    Y.times(m)            
-    k1    = X.c11
-    a1    = X.c12
-    rho1  = X.c13
-    xsi1  = X.c22
-    b1    = X.c23
-    zeta1 = X.c33    
-    k2    = Y.c11
-    a2    = Y.c12
-    rho2  = Y.c13
-    xsi2  = Y.c22
-    b2    = Y.c23
-    zeta2 = Y.c33 
-    k3    = k1 + k2  
-    a3    = a1 + a2
-    rho3  = rho1 +  rho2
-    xsi3  = xsi1 +  xsi2
-    b3    = b1 +    b2
-    zeta3 = zeta1 + zeta2               
-    start = time.time()           
-    if X.planes == 9:
-        print 'Full polarimetry'  
-        det1 = k1*xsi1*zeta1 + 2*real(a1*b1*conj(rho1)) - xsi1*(abs(rho1)**2) - k1*(abs(b1)**2) - zeta1*(abs(a1)**2)    
-        det2 = k2*xsi2*zeta2 + 2*real(a2*b2*conj(rho2)) - xsi2*(abs(rho2)**2) - k2*(abs(b2)**2) - zeta2*(abs(a2)**2)       
-        det3 = k3*xsi3*zeta3 + 2*real(a3*b3*conj(rho3)) - xsi3*(abs(rho3)**2) - k3*(abs(b3)**2) - zeta3*(abs(a3)**2)   
+        return    
+    start = time.time() 
+    if bands == 9:
+        print 'Quad polarimetry'  
+#      C11 (k1)
+        b = inDataset1.GetRasterBand(1)
+        k1 = m*b.ReadAsArray(0,0,cols,rows)
+#      C12  (a1)
+        b = inDataset1.GetRasterBand(2)
+        a1 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset1.GetRasterBand(3)    
+        im = b.ReadAsArray(0,0,cols,rows)
+        a1 = m*(a1 + 1j*im)
+#      C13  (rho1)
+        b = inDataset1.GetRasterBand(4)
+        rho1 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset1.GetRasterBand(5)
+        im = b.ReadAsArray(0,0,cols,rows)
+        rho1 = m*(rho1 + 1j*im)      
+#      C22 (xsi1)
+        b = inDataset1.GetRasterBand(6)
+        xsi1 = m*b.ReadAsArray(0,0,cols,rows)    
+#      C23 (b1)        
+        b = inDataset1.GetRasterBand(7)
+        b1 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset1.GetRasterBand(8)
+        im = b.ReadAsArray(0,0,cols,rows)
+        b1 = m*(b1 + 1j*im)      
+#      C33 (zeta1)
+        b = inDataset1.GetRasterBand(9)
+        zeta1 = m*b.ReadAsArray(0,0,cols,rows)              
+#      C11 (k2)
+        b = inDataset2.GetRasterBand(1)
+        k2 = n*b.ReadAsArray(0,0,cols,rows)
+#      C12  (a2)
+        b = inDataset2.GetRasterBand(2)
+        a2 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset2.GetRasterBand(3)
+        im = b.ReadAsArray(0,0,cols,rows)
+        a2 = n*(a2 + 1j*im)
+#      C13  (rho2)
+        b = inDataset2.GetRasterBand(4)
+        rho2 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset2.GetRasterBand(5)
+        im = b.ReadAsArray(0,0,cols,rows)
+        rho2 = n*(rho2 + 1j*im)        
+#      C22 (xsi2)
+        b = inDataset2.GetRasterBand(6)
+        xsi2 = n*b.ReadAsArray(0,0,cols,rows)    
+#      C23 (b2)        
+        b = inDataset2.GetRasterBand(7)
+        b2 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset2.GetRasterBand(8)
+        im = b.ReadAsArray(0,0,cols,rows)
+        b2 = n*(b2 + 1j*im)        
+#      C33 (zeta2)
+        b = inDataset2.GetRasterBand(9)
+        zeta2 = n*b.ReadAsArray(0,0,cols,rows)           
+        k3    = k1 + k2  
+        a3    = a1 + a2
+        rho3  = rho1 + rho2
+        xsi3  = xsi1 + xsi2
+        b3    = b1 + b2
+        zeta3 = zeta1 + zeta2           
+        det1 = k1*xsi1*zeta1 + 2*np.real(a1*b1*np.conj(rho1)) - xsi1*(abs(rho1)**2) - k1*(abs(b1)**2) - zeta1*(abs(a1)**2)    
+        det2 = k2*xsi2*zeta2 + 2*np.real(a2*b2*np.conj(rho2)) - xsi2*(abs(rho2)**2) - k2*(abs(b2)**2) - zeta2*(abs(a2)**2)       
+        det3 = k3*xsi3*zeta3 + 2*np.real(a3*b3*np.conj(rho3)) - xsi3*(abs(rho3)**2) - k3*(abs(b3)**2) - zeta3*(abs(a3)**2)       
         p = 3
         f = p**2
-        cst = p*((n+m)*log(n+m)-n*log(n)-m*log(m)) 
+        cst = p*((n+m)*np.log(n+m)-n*np.log(n)-m*np.log(m)) 
         rho = 1. - (2.*p**2-1.)*(1./n + 1./m - 1./(n+m))/(6.*p)    
-        omega2 = -(p*p/4.)*(1. - 1./rho)**2 + p**2*(p**2-1.)*(1./n**2 + 1./m**2 - 1./(n+m)**2)/(24.*rho**2)                             
-    elif X.planes == 5:
-        print 'Full polarimetry, azimuthal symmetry'
-        det1 = k1*xsi1*zeta1 - xsi1*(abs(rho1)**2)
-        det2 = k2*xsi2*zeta2 - xsi2*(abs(rho2)**2)
-        det3 = k3*xsi3*zeta3 - xsi3*(abs(rho3)**2)   
-        p = 3  
-        cst = p*((n+m)*log(n+m)-n*log(n)-m*log(m))    
-        p = 2
-        f1 = p**2
-        rho1 = 1.-(2.*f1-1.)*(1./n+1./m-1./(n+m))/(6.*p)
-        p = 1
-        f2 = p**2
-        rho2 = 1.-(2.*f2-1.)*(1./n+1./m-1./(n+m))/(6.*p)
-        f = f1 + f2
-        rho = (f1*rho1 + f2*rho2)/f
-        omega2 = -f*(1.-1./rho)**2/4. + (f1*(f1-1.)+f2*(f2-1.))*(1./n**2+1./m**2-1./(n+m)**2)/(24.*rho**2)                          
-    elif X.planes == 3:
-        print 'Full polarimetry, diagonal only'
-        det1 = k1*xsi1*zeta1 
-        det2 = k2*xsi2*zeta2 
-        det3 = k3*xsi3*zeta3      
-        p = 3
-        cst = p*((n+m)*log(n+m)-n*log(n)-m*log(m)) 
-        p = 1
-        f1 = p**2
-        rho1 = 1-(2*f1-1)*(1./n+1./m-1./(n+m))/(6.*p)
-        p = 1
-        f2 = p**2
-        rho2 = 1-(2*f2-1)*(1./n+1/m-1./(n+m))/(6.*p)
-        p = 1
-        f3 = p**2
-        rho3 = 1-(2*f3-1)*(1./n+1/m-1./(n+m))/(6.*p)
-        f = f1 + f2 + f3
-        rho = (f1*rho1 + f2*rho2 + f3*rho3)/f
-        omega2 = -f*(1-1./rho)**2/4. + (f1*(f1-1)+f2*(f2-1)+f3*(f3-1))*(1./n**2+1./m**2-1./(n+m)**2)/(24.*rho**2)                        
-    elif X.planes == 4:
-        print 'Dual polarimetry'
+        omega2 = -(p*p/4.)*(1. - 1./rho)**2 + p**2*(p**2-1.)*(1./n**2 + 1./m**2 - 1./(n+m)**2)/(24.*rho**2)        
+    elif bands == 4:
+        print 'Dual polarimetry'  
+#      C11 (k1)
+        b = inDataset1.GetRasterBand(1)
+        k1 = m*b.ReadAsArray(0,0,cols,rows)
+#      C12  (a1)
+        b = inDataset1.GetRasterBand(2)
+        a1 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset1.GetRasterBand(3)
+        im = b.ReadAsArray(0,0,cols,rows)
+        a1 = m*(a1 + 1j*im)        
+#      C22 (xsi1)
+        b = inDataset1.GetRasterBand(4)
+        xsi1 = m*b.ReadAsArray(0,0,cols,rows)          
+#      C11 (k2)
+        b = inDataset2.GetRasterBand(1)
+        k2 = n*b.ReadAsArray(0,0,cols,rows)
+#      C12  (a2)
+        b = inDataset2.GetRasterBand(2)
+        a2 = b.ReadAsArray(0,0,cols,rows)
+        b = inDataset2.GetRasterBand(3)
+        im = b.ReadAsArray(0,0,cols,rows)
+        a2 = n*(a2 + 1j*im)        
+#      C22 (xsi2)
+        b = inDataset2.GetRasterBand(4)
+        xsi2 = n*b.ReadAsArray(0,0,cols,rows)        
+        k3    = k1 + k2  
+        a3    = a1 + a2
+        xsi3  = xsi1 + xsi2       
         det1 = k1*xsi1 - abs(a1)**2
         det2 = k2*xsi2 - abs(a2)**2 
         det3 = k3*xsi3 - abs(a3)**2        
         p = 2 
-        cst = p*((n+m)*log(n+m)-n*log(n)-m*log(m)) 
+        cst = p*((n+m)*np.log(n+m)-n*np.log(n)-m*np.log(m)) 
         f = p**2
         rho = 1-(2*f-1)*(1./n+1./m-1./(n+m))/(6.*p)
-        omega2 = -f/4.*(1-1./rho)**2 + f*(f-1)*(1./n**2+1./m**2-1./(n+m)**2)/(24.*rho**2)                         
-    elif X.planes == 2:
-        print 'Dual polarimetry, diagonal only'
-        det1 = k1*xsi1
-        det2 = k2*xsi2
-        det3 = k3*xsi3  
-        p = 2 
-        cst = p*((n+m)*log(n+m)-n*log(n)-m*log(m))   
-        p = 1
-        f1 = p**2
-        rho1 = 1-(2.*f1-1)*(1./n+1./m-1./(n+m))/(6.*p)
-        p = 1
-        f2 = p**2
-        rho2 = 1-(2.*f2-1)*(1./n+1./m-1./(n+m))/(6.*p)
-        f = f1 + f2
-        rho = (f1*rho1 + f2*rho2)/f
-        omega2 = -f*(1-1./rho)**2/4. + (f1*(f1-1)+f2*(f2-1))*(1./n**2+1./m**2-1./(n+m)**2)/(24.*rho**2)                         
-    elif X.planes == 1:
-        print 'One channel data only'
+        omega2 = -f/4.*(1-1./rho)**2 + f*(f-1)*(1./n**2+1./m**2-1./(n+m)**2)/(24.*rho**2)  
+    elif bands == 1:
+        print 'Single polarimetry'         
+#      C11 (k1)
+        b = inDataset1.GetRasterBand(1)
+        k1 = m*b.ReadAsArray(0,0,cols,rows) 
+#      C11 (k2)
+        b = inDataset2.GetRasterBand(1)
+        k2 = n*b.ReadAsArray(0,0,cols,rows) 
+        k3 = k1 + k2
         det1 = k1 
         det2 = k2
         det3 = k3    
         p = 1 
-        cst = p*((n+m)*log(n+m)-n*log(n)-m*log(m)) 
+        cst = p*((n+m)*np.log(n+m)-n*np.log(n)-m*np.log(m)) 
         f = p**2
         rho = 1-(2.*f-1)*(1./n+1./m-1./(n+m))/(6.*p)
-        omega2 = -f/4.*(1-1./rho)**2+f*(f-1)*(1./n**2+1./m**2-1./(n+m)**2)/(24.*rho**2)                     
-    else:
-        print 'Incorrect input data'
-        return 
-    lnQ = cst+n*log(det1)+m*log(det2)-(n+m)*log(det3)
+        omega2 = -f/4.*(1-1./rho)**2+f*(f-1)*(1./n**2+1./m**2-1./(n+m)**2)/(24.*rho**2)  
+    else:   
+        print 'Incorrect number of bands'
+        return   
+    idx = np.where(det1 <= 0.0)
+    det1[idx] = 0.0001   
+    idx = np.where(det2 <= 0.0)
+    det2[idx] = 0.0001 
+    idx = np.where(det3 <= 0.0)
+    det3[idx] = 0.0001  
+    lnQ = cst+m*np.log(det1)+n*np.log(det2)-(n+m)*np.log(det3)
 #  test statistic    
     Z = -2*rho*lnQ
 #  change probabilty
     P =  (1.-omega2)*stats.chi2.cdf(Z,[f])+omega2*stats.chi2.cdf(Z,[f+4])
 #  write to file system        
     driver = gdal.GetDriverByName(fmt)    
-    outDataset = driver.Create(outfile,X.samples,Y.lines,2,GDT_Float32)
-    if X.geotransform is not None:
-        outDataset.SetGeoTransform(X.geotransform)
-    if X.projection is not None:
-        outDataset.SetProjection(X.projection) 
+    outDataset = driver.Create(outfile,cols,rows,2,GDT_Float32)
+    geotransform = inDataset1.GetGeoTransform()
+    if geotransform is not None:
+        outDataset.SetGeoTransform(geotransform)
+    projection = inDataset1.GetProjection()        
+    if projection is not None:
+        outDataset.SetProjection(projection) 
     outBand = outDataset.GetRasterBand(1)
     outBand.WriteArray(Z,0,0) 
     outBand.FlushCache() 

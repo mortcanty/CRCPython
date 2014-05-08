@@ -2,13 +2,13 @@
 #  Name:     ex1_1.py
 import auxil.auxil as auxil
 from numpy import * 
-from osgeo import gdal  
+from osgeo import gdal   
 from osgeo.gdalconst import GA_ReadOnly 
 import matplotlib.pyplot as plt
  
 def main(): 
         
-    gdal.AllRegister()
+    gdal.AllRegister() 
     infile = auxil.select_infile() 
     if infile:                  
         inDataset = gdal.Open(infile,GA_ReadOnly)     

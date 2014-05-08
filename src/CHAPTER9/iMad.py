@@ -17,8 +17,8 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-import auxil.auxil as auxil
-import numpy as np  
+import auxil.auxil as auxil 
+import numpy as np    
 from scipy import linalg, stats 
 from osgeo import gdal
 from osgeo.gdalconst import GA_ReadOnly, GDT_Float32
