@@ -21,9 +21,9 @@
 import auxil.auxil as auxil
 import registerSAR
 import numpy as np
-from scipy import stats
+from scipy import stats, ndimage
 import os, time, gdal 
-from osgeo.gdalconst import GA_ReadOnly, GDT_Float32
+from osgeo.gdalconst import GA_ReadOnly, GDT_Float32, GDT_Byte
 
                        
 def main():
@@ -62,6 +62,10 @@ def main():
     outfile,fmt = auxil.select_outfilefmt() 
     if not outfile:
         return    
+#  significance level
+    sig = auxil.select_float(0.01, 'Choose significance level')   
+    print 'Signifcane level: %f'%sig  
+    start = time.time()    
     print 'co-registering...'
     registerSAR.registerSAR(infile1,infile2,'warp.tif','GTiff')
     infile2 = 'warp.tif'
@@ -71,8 +75,7 @@ def main():
     bands2 = inDataset2.RasterCount   
     if (bands != bands2) or (cols != cols2) or (rows != rows2):
         print 'Size mismatch'
-        return    
-    start = time.time() 
+        return   
     if bands == 9:
         print 'Quad polarimetry'  
 #      C11 (k1)
@@ -211,6 +214,18 @@ def main():
     Z = -2*rho*lnQ
 #  change probabilty
     P =  (1.-omega2)*stats.chi2.cdf(Z,[f])+omega2*stats.chi2.cdf(Z,[f+4])
+    P =  ndimage.filters.median_filter(P, size = (3,3))
+#  change map
+    a255 = np.ones((rows,cols),dtype=np.byte)*255
+    a0 = a255*0
+    c11 = np.log(k1+0.0001) 
+    min1 =np.min(c11)
+    max1 = np.max(c11)
+    c11 = (c11-min1)*255.0/(max1-min1)  
+    c11 = np.where(c11<0,a0,c11)  
+    c11 = np.where(c11>255,a255,c11) 
+    c11 = np.where(P>(1.0-sig),a0,c11)      
+    cmap = np.where(P>(1.0-sig),a255,c11)
 #  write to file system        
     driver = gdal.GetDriverByName(fmt)    
     outDataset = driver.Create(outfile,cols,rows,2,GDT_Float32)
@@ -227,8 +242,29 @@ def main():
     outBand.WriteArray(P,0,0) 
     outBand.FlushCache()     
     outDataset = None
-    print 'result written to: %s'%outfile 
-    print 'elapsed time: '+str(time.time()-start)      
+    print 'test statistic and probabilities written to: %s'%outfile 
+    basename = os.path.basename(outfile)
+    name, ext = os.path.splitext(basename)
+    outfile=outfile.replace(name,name+'_cmap')
+    outDataset = driver.Create(outfile,cols,rows,3,GDT_Byte)
+    geotransform = inDataset1.GetGeoTransform()
+    if geotransform is not None:
+        outDataset.SetGeoTransform(geotransform)
+    projection = inDataset1.GetProjection()        
+    if projection is not None:
+        outDataset.SetProjection(projection)     
+    outBand = outDataset.GetRasterBand(1)
+    outBand.WriteArray(cmap,0,0) 
+    outBand.FlushCache() 
+    outBand = outDataset.GetRasterBand(2)
+    outBand.WriteArray(c11,0,0) 
+    outBand.FlushCache()  
+    outBand = outDataset.GetRasterBand(3)
+    outBand.WriteArray(c11,0,0) 
+    outBand.FlushCache()  
+    outDataset = None    
+    print 'change map image written to: %s'%outfile   
+    print 'elapsed time: '+str(time.time()-start)  
                 
 if __name__ == '__main__':
     main()     
