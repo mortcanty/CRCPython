@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 #******************************************************************************
 #  Name:     ffncg.py
-#  Purpose:  neural network image classification trained with scaled congugate gradient
-#            with 10-fold cross-validation on picloud
+#  Purpose:  
+#        Neural network image classification trained with scaled congugate gradient
+#        with 10-fold cross-validation on multyvac
+#  Note: 
+#        Presently multyvac does not allow parallel processing. This script illustrates
+#        use of multyvac service. The map(crossvalidate,traintest) call in traintest()
+#        will eventually (I hpoe) be parallelized.     
 #  Usage:             
 #    python ffncg.py
 #
-#  Copyright (c) 2012, Mort Canty
+#  Copyright (c) 2014, Mort Canty
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation; either version 2 of the License, or
@@ -23,24 +28,27 @@ from shapely.geometry import asPolygon, MultiPoint
 import matplotlib.pyplot as plt 
 import shapely.wkt 
 import numpy as np  
-import cloud, gdal, ogr, osr, os, time
+import gdal, ogr, osr, os, time
+import multyvac as mv 
+
+epochs = 500
  
 def crossvalidate((Gstrn,lstrn,Gstst,lstst,L)):
     affn = Ffncg(Gstrn,lstrn,L)
-    if affn.train(epochs=1000):
+    if affn.train(epochs=epochs):
         return affn.test(Gstst,lstst)
     else:
         return None
 
-def traintst(Gs,ls,L):
+def traintst(Gs,ls,L): 
     m = np.shape(Gs)[0]
     traintest = []
     for i in range(10):
         sl = slice(i*m//10,(i+1)*m//10)
         traintest.append( (np.delete(Gs,sl,0), \
         np.delete(ls,sl,0),Gs[sl,:],ls[sl,:],L) )
-    jids=cloud.map(crossvalidate,traintest,_type='c1') 
-    return cloud.result(jids)   
+    result = map(crossvalidate,traintest) 
+    return result   
 
 class Ffn(object):
     '''Abstract base class for 2-layer, 
@@ -219,9 +227,7 @@ class Ffncg(Ffn):
             print 'Error: %s'%e
             return None        
 
-def main():
-#    cloud.setkey('<api_key>','<api_secret_key>')   
-    cloud.setkey(2329,'270cb3cccb9beb65d2f424b24ccbd5a920c5ccef')    
+def main():  
     gdal.AllRegister()
     path = auxil.select_directory('Choose input directory')
     if path:
@@ -357,7 +363,7 @@ def main():
     affn = Ffncg(Gstrn,lstrn,L)
     print 'training on %i pixel vectors...' % np.shape(Gstrn)[0]
     start = time.time()
-    cost = affn.train(epochs=1000)
+    cost = affn.train(epochs=epochs)
     print 'elapsed time %s' %str(time.time()-start) 
     if cost is not None:
 #        cost = np.log10(cost)  
@@ -386,13 +392,16 @@ def main():
     else:
         print 'an error occured' 
         return 
-    print 'submitting cross-validation to picloud'
-    cloud.config.max_transmit_data=12000000    
+    
+    print 'submitting cross-validation to multyvac'    
     start = time.time()
-    jid = cloud.call(traintst,Gs,ls,L,_env='ImAnal')  
+    jid = mv.submit(traintst,Gs,ls,L,_layer='ms_image_analysis')  
     print 'submission time: %s' %str(time.time()-start)
     start = time.time()    
-    result = cloud.result(jid) 
+    job = mv.get(jid)
+    result = job.get_result(job) 
+    
+    
     print 'cloud execution time: %s' %str(time.time()-start)      
     print 'misclassification rate: %f' %np.mean(result)
     print 'standard deviation:     %f' %np.std(result)         
