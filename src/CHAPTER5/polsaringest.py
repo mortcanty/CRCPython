@@ -129,7 +129,7 @@ def main():
         outBand.WriteArray(outim[idx[k],:,:],0,0) 
         outBand.FlushCache() 
     outDataset = None            
-    print 'polarimetric image written to: %s'%outfile        
+    print '%i-band polarimetric image written to: %s'%(bands,outfile)        
             
 if __name__ == '__main__':
     main()

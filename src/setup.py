@@ -1,7 +1,7 @@
 from distutils.core import setup
 
 setup(name = 'auxil',
-               version = '1.0',
+               version = '1.1',
 			   author = 'Mort Canty',
 			   author_email = 'mort.canty@gmail.com',
 			   url = 'http://mcanty.homepage.t-online.de/',
