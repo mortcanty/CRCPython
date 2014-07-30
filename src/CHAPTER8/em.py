@@ -112,6 +112,7 @@ def main():
         rows = inDataset.RasterYSize    
         bands = inDataset.RasterCount
     else:
+        
         return
     pos =  auxil.select_pos(bands) 
     if not pos:
@@ -214,10 +215,10 @@ def main():
 #  classify
     labels = np.byte(np.argmax(U,axis=0)+1)
     class_image[0:rows,0:cols] = np.reshape(labels,(rows,cols))
-    rows,cols = class_image.shape
+    rows1,cols1 = class_image.shape
 #  write to disk
     driver = gdal.GetDriverByName(outfmt)    
-    outDataset = driver.Create(outfile,cols,rows,1,GDT_Byte)
+    outDataset = driver.Create(outfile,cols1,rows1,1,GDT_Byte)
     projection = inDataset.GetProjection()
     geotransform = inDataset.GetGeoTransform()
     if geotransform is not None:
@@ -271,7 +272,7 @@ def main():
         f = open(headerfile,'w')
         f.write(str(hdr))
         f.close()                 
-    print 'result written to: '+outfile       
+    print 'classification written to: '+outfile       
     print 'elapsed time: '+str(time.time()-start)                        
     print '--done------------------------'  
        

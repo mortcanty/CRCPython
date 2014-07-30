@@ -6,8 +6,8 @@
 #        with 10-fold cross-validation on multyvac
 #  Note: 
 #        Presently multyvac does not allow parallel processing. This script illustrates
-#        use of multyvac service. The map(crossvalidate,traintest) call in traintest()
-#        will eventually (I hpoe) be parallelized.     
+#        the use of multyvac service. The map(crossvalidate,traintest) call in traintest()
+#        will eventually (I hope) be parallelized.     
 #  Usage:             
 #    python ffncg.py
 #

@@ -318,7 +318,7 @@ if __name__ == '__main__':
     ls = np.zeros((100,6))
     for l in ls:
         l[np.random.randint(0,6)]=1.0 
-    cl = Ffnbp(Gs,ls,4)  
-    if cl.train() is not None:
+    cl = Maxlike(Gs,ls)  
+    if cl.train():
         classes, _ = cl.classify(Gs) 
     print classes

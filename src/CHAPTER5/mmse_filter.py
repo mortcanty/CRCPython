@@ -119,8 +119,8 @@ def main():
             print '%i '%j, 
             sys.stdout.flush()
         windex = get_windex(j,cols)
-        for i in range(3,cols-3):
-            wind = np.reshape(span[windex],(7,7))
+        for i in range(3,cols-3):            
+            wind = np.reshape(span[windex],(7,7))         
 #          3x3 compression
             w = congrid.congrid(wind,(3,3),method='spline',centre=True)
 #          get appropriate edge mask
