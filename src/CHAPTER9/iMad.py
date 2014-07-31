@@ -22,7 +22,7 @@ import numpy as np
 from scipy import linalg, stats 
 from osgeo import gdal
 from osgeo.gdalconst import GA_ReadOnly, GDT_Float32
-import os, sys,time
+import sets, os, sys,time
 
 def main():     
     gdal.AllRegister()
@@ -106,9 +106,12 @@ def main():
             for k in range(bands):
                 tile[:,k] = rasterBands1[k].ReadAsArray(x10,y10+row,cols,1)
                 tile[:,bands+k] = rasterBands2[k].ReadAsArray(x20,y20+row,cols,1)
-#              eliminate no-data pixels (assuming all zeroes)                  
-                tst = np.sum(tile,axis=1) 
-                idx = np.where(tst>0)[0]     
+#          eliminate no-data pixels (assuming all zeroes)                  
+            tst1 = np.sum(tile[:,0:bands],axis=1) 
+            tst2 = np.sum(tile[:,bands::],axis=1) 
+            idx1 = set(np.where(  (tst1>0)  )[0]) 
+            idx2 = set(np.where(  (tst2>0)  )[0]) 
+            idx = list(idx1.intersection(idx2))   
             if itr>0:
                 mads = np.asarray((tile[:,0:bands]-means1)*A - (tile[:,bands::]-means2)*B)
                 chisqr = np.sum((mads/sigMADs)**2,axis=1)
