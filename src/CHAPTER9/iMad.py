@@ -111,7 +111,7 @@ def main():
             tst2 = np.sum(tile[:,bands::],axis=1) 
             idx1 = set(np.where(  (tst1>0)  )[0]) 
             idx2 = set(np.where(  (tst2>0)  )[0]) 
-            idx = list(idx1.intersection(idx2))   
+            idx = list(idx1.intersection(idx2))    
             if itr>0:
                 mads = np.asarray((tile[:,0:bands]-means1)*A - (tile[:,bands::]-means2)*B)
                 chisqr = np.sum((mads/sigMADs)**2,axis=1)
