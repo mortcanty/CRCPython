@@ -168,6 +168,7 @@ def main():
         return     
 #  sort clusters wrt partition density
     idx = np.argsort(pdens)  
+    idx = idx[::-1]
     U = U[idx,:]
 #  clustering at increasing scales
     for i in range(max_scale-min_scale):
