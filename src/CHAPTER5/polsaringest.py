@@ -43,7 +43,7 @@ def main():
         return
     inDataset = None
 #  spatial subset    
-    x0,y0,rows,cols=auxil.select_dims([0,0,rows,cols])    
+    x0,y0,cols,rows=auxil.select_dims([0,0,cols,rows])    
 #  output file
     outfile,fmt = auxil.select_outfilefmt() 
     if not outfile:

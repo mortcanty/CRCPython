@@ -79,7 +79,8 @@ def registerSAR(file0, file1, outfile, fmt):
         image1 = np.zeros((4, rows1 + 100, cols1 + 100), dtype=np.float32)                                   
         for k in range(4):
             band = inDataset1.GetRasterBand(k + 1)
-            image1[k, 0:rows1, 0:cols1] = band.ReadAsArray(0, 0, cols1, rows1).astype(np.float32)    
+            image1[k, 0:rows1, 0:cols1] = band.ReadAsArray(0, 0, cols1, rows1).astype(np.float32)  
+        span1 = np.sum(image1[[0, 3] , :, :], axis=0)          
         span1 = np.log(np.nan_to_num(span1) + 0.001)          
         scale, angle, shift = auxil.similarity(span0, span1)    
         for k in range(4): 
