@@ -49,20 +49,15 @@ def main():
 #  PAN image     
     file2 = auxil.select_infile(title='Choose PAN image') 
     if file2:                  
-        inDataset2 = gdal.Open(file2,GA_ReadOnly)     
-        cols = inDataset2.RasterXSize
-        rows = inDataset2.RasterYSize    
+        inDataset2 = gdal.Open(file2,GA_ReadOnly)       
         bands = inDataset2.RasterCount
     else:
         return   
     if bands>1:
         print 'Must be a single band (panchromatic) image'
         return 
-    dims=auxil.select_dims([0,0,cols,rows])  
-    if dims:
-        x20,y20,cols2,rows2 = dims
-    else:
-        return 
+    geotransform1 = inDataset1.GetGeoTransform()
+    geotransform2 = inDataset2.GetGeoTransform()        
 #  outfile
     outfile, fmt = auxil.select_outfilefmt()  
     if not outfile:
@@ -95,17 +90,30 @@ def main():
         band = inDataset1.GetRasterBand(b)
         MS[k,:,:] = band.ReadAsArray(x10,y10,cols1,rows1)
         k += 1
-    band = inDataset2.GetRasterBand(1)
-    PAN = band.ReadAsArray(x20,y20,cols2,rows2) 
-#  if integer assume 11bit quantization    
-    if PAN.dtype == np.int16:
-        PAN = auxil.byteStretch(PAN,(0,2**11))
+#  if integer assume 11bit quantization otherwise must be byte   
     if MS.dtype == np.int16:
-        MS = auxil.byteStretch(MS,(0,2**11))       
-#  avoid edges            
-    cols2 = 8*(cols2//8)
-    rows2 = 8*(rows2//8) 
-    PAN = PAN[:rows2,:cols2]             
+        fact = 8.0
+        MS = auxil.byteStretch(MS,(0,2**11)) 
+    else:
+        fact = 1.0
+#  read in corresponding spatial subset of PAN image    
+    if (geotransform1 is None) or (geotransform2 is None):
+        print 'Image not georeferenced, aborting' 
+        return
+#  upper left corner pixel in PAN    
+    gt1 = list(geotransform1)               
+    gt2 = list(geotransform2)
+    ulx1 = gt1[0] + x10*gt1[1]
+    uly1 = gt1[3] + y10*gt1[5]
+    x20 = int(round(((ulx1 - gt2[0])/gt2[1])))
+    y20 = int(round(((uly1 - gt2[3])/gt2[5])))
+    cols2 = cols1*ratio
+    rows2 = rows1*ratio
+    band = inDataset2.GetRasterBand(1)
+    PAN = band.ReadAsArray(x20,y20,cols2,rows2)        
+#  if integer assume 11-bit quantization, otherwise must be byte    
+    if PAN.dtype == np.int16:
+        PAN = auxil.byteStretch(PAN,(0,2**11))                                   
 #  compress PAN to resolution of MS image  
     panDWT = auxil.DWTArray(PAN,cols2,rows2)          
     r = ratio
@@ -170,33 +178,27 @@ def main():
         while r < ratio:
             msDWT.invert()
             r *= 2                            
-        sharpened[i,:,:] = msDWT.get_quadrant(0)          
+        sharpened[i,:,:] = msDWT.get_quadrant(0)      
+    sharpened *= fact    
 #  write to disk       
-    if outfile:
-        driver = gdal.GetDriverByName(fmt)   
-        outDataset = driver.Create(outfile,
-                        cols2,rows2,num_bands,GDT_Float32)
-        projection1 = inDataset1.GetProjection()
-        geotransform1 = inDataset1.GetGeoTransform()
-        geotransform2 = inDataset2.GetGeoTransform()
-        if geotransform2 is not None:
-            gt2 = list(geotransform2)
-            if geotransform1 is not None:
-                gt1 = list(geotransform1)
-                gt1[0] += x10*gt2[1]  # using PAN pixel sizes
-                gt1[3] += y10*gt2[5]
-                gt1[1] = gt2[1]
-                gt1[2] = gt2[2]
-                gt1[4] = gt2[4]
-                gt1[5] = gt2[5]
-                outDataset.SetGeoTransform(tuple(gt1))
-        if projection1 is not None:
-            outDataset.SetProjection(projection1)        
-        for k in range(num_bands):        
-            outBand = outDataset.GetRasterBand(k+1)
-            outBand.WriteArray(sharpened[k,:,:],0,0) 
-            outBand.FlushCache() 
-        outDataset = None    
+    driver = gdal.GetDriverByName(fmt)   
+    outDataset = driver.Create(outfile,cols2,rows2,num_bands,GDT_Float32)
+    projection1 = inDataset1.GetProjection()
+    if projection1 is not None:
+        outDataset.SetProjection(projection1)        
+    gt1 = list(geotransform1)
+    gt1[0] += x10*ratio  
+    gt1[3] -= y10*ratio
+    gt1[1] = gt2[1]
+    gt1[2] = gt2[2]
+    gt1[4] = gt2[4]
+    gt1[5] = gt2[5]
+    outDataset.SetGeoTransform(tuple(gt1))   
+    for k in range(num_bands):        
+        outBand = outDataset.GetRasterBand(k+1)
+        outBand.WriteArray(sharpened[k,:,:],0,0) 
+        outBand.FlushCache() 
+    outDataset = None    
     print 'Result written to %s'%outfile    
     inDataset1 = None
     inDataset2 = None                      
