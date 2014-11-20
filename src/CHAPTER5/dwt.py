@@ -122,7 +122,7 @@ def main():
         r /= 2
     bn0 = panDWT.get_quadrant(0) 
     lines0,samples0 = bn0.shape    
-    bn1 = MS[k1,:,:]  
+    bn1 = MS[k1-1,:,:]  
 #  register (and subset) MS image to compressed PAN image 
     (scale,angle,shift) = auxil.similarity(bn0,bn1)
     tmp = np.zeros((num_bands,lines0,samples0))
