@@ -25,7 +25,7 @@ class Maxlike(MaximumLikelihoodC):
      
     def __init__(self,Gs,ls): 
         MaximumLikelihoodC.__init__(self)
-        self._K = ls.shape[1] 
+        self._K = ls.shape[1]  
         self._Gs = Gs 
         self._N = Gs.shape[1]
         self._ls = ls

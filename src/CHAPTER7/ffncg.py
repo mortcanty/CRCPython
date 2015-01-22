@@ -402,7 +402,7 @@ def main():
     result = job.get_result(job) 
     
     
-    print 'cloud execution time: %s' %str(time.time()-start)      
+    print 'execution time: %s' %str(time.time()-start)      
     print 'misclassification rate: %f' %np.mean(result)
     print 'standard deviation:     %f' %np.std(result)         
     print '--------done---------------------'       

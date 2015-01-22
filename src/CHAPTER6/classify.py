@@ -15,11 +15,11 @@
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
-
+ 
 import auxil.auxil as auxil
 import auxil.header as header
 import auxil.supervisedclass as sc
-from auxil.auxil import ctable
+from auxil.auxil import ctable 
 import gdal, ogr, osr, os, time
 from osgeo.gdalconst import GA_ReadOnly, GDT_Byte
 from shapely.geometry import asPolygon, MultiPoint
@@ -89,12 +89,15 @@ def main():
 #  coordinate transformation from training to image projection   
     ct= osr.CoordinateTransformation(trnsr,imsr) 
 #  number of classes    
+    K = 1
     feature = trnLayer.GetNextFeature() 
     while feature:
         classid = feature.GetField('CLASS_ID')
+        if int(classid)>K:
+            K = int(classid)
         feature = trnLayer.GetNextFeature() 
     trnLayer.ResetReading()    
-    K = int(classid)+1       
+    K += 1       
     print '========================='
     print 'supervised classification'
     print '========================='
@@ -117,7 +120,7 @@ def main():
     print 'reading training data...'
     for i in range(trnLayer.GetFeatureCount()):
         feature = trnLayer.GetFeature(i)
-        classid = feature.GetField('CLASS_ID')
+        classid = str(feature.GetField('CLASS_ID'))
         classname  = feature.GetField('CLASS_NAME')
         if classid not in classids:
             classnames += ',   '+ classname
