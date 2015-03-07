@@ -1,0 +1,8 @@
+setup.py
+auxil\__init__.py
+auxil\auxil.py
+auxil\congrid.py
+auxil\header.py
+auxil\lookup.py
+auxil\png.py
+auxil\supervisedclass.py

@@ -26,7 +26,7 @@ import ctypes
 from scipy.special import betainc 
 from numpy.fft import fft2, ifft2, fftshift 
 import scipy.ndimage.interpolation as ndii 
-if platform.system() == 'Windows': 
+if platform.system() == 'Windows':  
     lib = ctypes.cdll.LoadLibrary('prov_means.dll')
 elif platform.system() == 'Linux':
     lib = ctypes.cdll.LoadLibrary('libprov_means.so')    

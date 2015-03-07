@@ -21,11 +21,13 @@
 import numpy as np  
 from mlpy import MaximumLikelihoodC, LibSvm  
 
+epochs = 1000     
+
 class Maxlike(MaximumLikelihoodC):
      
     def __init__(self,Gs,ls): 
         MaximumLikelihoodC.__init__(self)
-        self._K = ls.shape[1]  
+        self._K = ls.shape[1] 
         self._Gs = Gs 
         self._N = Gs.shape[1]
         self._ls = ls
@@ -51,6 +53,14 @@ class Maxlike(MaximumLikelihoodC):
     def classify(self,Gs):
         classes = self.pred(Gs)
         return (classes, None)    
+    
+    def test(self,Gs,ls):
+        m = np.shape(Gs)[0]
+        classes, _ = self.classify(Gs)
+        classes = np.asarray(classes,np.int16)
+        labels = np.argmax(np.transpose(ls),axis=0)+1
+        misscls = np.where(classes-labels)[0]
+        return len(misscls)/float(m)
         
 
 class Ffn(object):
@@ -125,16 +135,14 @@ class Ffn(object):
         m = np.shape(Gs)[0]
         classes, _ = self.classify(Gs)
         classes = np.asarray(classes,np.int16)
-        labels = np.argmax(ls.T,axis=0)+1
+        labels = np.argmax(ls.T,axis=0) + 1
         misscls = np.where(classes-labels)[0]
         return len(misscls)/float(m)
                        
     def cost(self):
         Ms, _ = self.vforwardpass(self._Gs)
         return -np.sum(np.multiply(self._ls,np.log(Ms+1e-20)))
- 
-
-epochs = 1000        
+    
     
 class Ffnbp(Ffn):
     
@@ -311,6 +319,14 @@ class Svm(object):
                              pred_probability(Gs))       
         classes = np.argmax(probs,axis=0)+1
         return (classes, probs) 
+    
+    def test(self,Gs,ls):
+        m = np.shape(Gs)[0]
+        classes, _ = self.classify(Gs)
+        classes = np.asarray(classes,np.int16)
+        labels = np.argmax(np.transpose(ls),axis=0)+1
+        misscls = np.where(classes-labels)[0]
+        return len(misscls)/float(m)
     
 if __name__ == '__main__':
 #  test on random data    
