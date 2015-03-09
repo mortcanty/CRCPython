@@ -19,9 +19,7 @@
 
 
 import numpy as np  
-from mlpy import MaximumLikelihoodC, LibSvm  
-
-epochs = 1000     
+from mlpy import MaximumLikelihoodC, LibSvm    
 
 class Maxlike(MaximumLikelihoodC):
      
@@ -146,13 +144,14 @@ class Ffn(object):
     
 class Ffnbp(Ffn):
     
-    def __init__(self,Gs,ls,L):
+    def __init__(self,Gs,ls,L,epochs=1000):
         Ffn.__init__(self,Gs,ls,L)
+        self.epochs=epochs
            
     def train(self):
         eta = 0.01
         alpha = 0.5
-        maxitr = epochs*self._m 
+        maxitr = self.epochs*self._m 
         inc_o1 = 0.0
         inc_h1 = 0.0
         epoch = 0
@@ -189,8 +188,9 @@ class Ffnbp(Ffn):
     
 class Ffncg(Ffn):
     
-    def __init__(self,Gs,ls,L):
+    def __init__(self,Gs,ls,L,epochs=1000):
         Ffn.__init__(self,Gs,ls,L)
+        self.epochs=epochs
     
     def gradient(self):
 #      gradient of cross entropy wrt synaptic weights          
@@ -244,7 +244,7 @@ class Ffncg(Ffn):
             d = -g
             k = 0
             lam = 0.001
-            while k < epochs:
+            while k < self.epochs:
                 d2 = np.sum(d*d)                # d^2
                 dTHd = np.sum(self.rop(d).A*d)  # d^T.H.d
                 delta = dTHd + lam*d2
